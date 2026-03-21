@@ -173,8 +173,11 @@ def users():
     
     users = User.query.all()
     return jsonify([{
-        'id': u.id, 'username': u.username, 'balance': u.balance, 
-        'discord_id': u.discord_id, 'is_admin': u.is_admin
+        'id': u.id,
+        'username': u.username,
+        'balance': u.balance,
+        'discord_id': u.discord_id,
+        'is_admin': u.is_admin
     } for u in users])
 
 @admin_bp.route('/purchases')
@@ -186,8 +189,9 @@ def get_purchases():
     purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).all()
     result = []
     for p in purchases:
-        user = User.query.get(p.user_id)
-        product = Product.query.get(p.product_id)
+        # A backref miatt p.user elérhető!
+        username = p.user.username if p.user else 'Unknown'
+        product_name = p.product.name if p.product else 'Unknown'
         credentials = []
         if p.credentials:
             try:
@@ -197,8 +201,8 @@ def get_purchases():
         
         result.append({
             'id': p.id,
-            'user': user.username if user else 'Unknown',
-            'product': product.name if product else 'Unknown',
+            'user': username,
+            'product': product_name,
             'price_paid': p.price_paid,
             'payment_method': p.payment_method,
             'credentials': credentials,
@@ -214,21 +218,24 @@ def send_balance():
     
     try:
         data = request.get_json()
-        user = User.query.filter_by(username=data['username']).first()
-        if not user:
+        username = data.get('username')
+        amount = float(data.get('amount', 0))
+        action = data.get('action')
+        
+        target_user = User.query.filter_by(username=username).first()
+        if not target_user:
             return jsonify({'error': 'User not found'}), 404
         
-        amount = float(data['amount'])
-        if data['action'] == 'add':
-            user.balance += amount
-        elif data['action'] == 'remove':
-            if user.balance < amount:
+        if action == 'add':
+            target_user.balance += amount
+        elif action == 'remove':
+            if target_user.balance < amount:
                 return jsonify({'error': 'Insufficient balance'}), 400
-            user.balance -= amount
+            target_user.balance -= amount
         else:
             return jsonify({'error': 'Invalid action'}), 400
         
         db.session.commit()
-        return jsonify({'success': True, 'new_balance': user.balance})
+        return jsonify({'success': True, 'new_balance': target_user.balance})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

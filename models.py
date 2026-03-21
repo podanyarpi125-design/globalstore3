@@ -14,8 +14,9 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    purchases = db.relationship('Purchase', backref='user', lazy='dynamic')
-    transactions = db.relationship('Transaction', backref='user', lazy='dynamic')
+    # CSAK EGY KAPCSOLAT! (a backref='user' a Purchase-ben lesz)
+    purchases = db.relationship('Purchase', backref='user', lazy=True)
+    transactions = db.relationship('Transaction', backref='user', lazy=True)
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -32,7 +33,7 @@ class Purchase(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     product = db.relationship('Product')
-    user = db.relationship('User')  # <- FIX 1: HIÁNYZÓ KAPCSOLAT!
+    # NINCS KÜLÖN 'user' KAPCSOLAT! (a backref a User-ből jön)
     
     quantity = db.Column(db.Integer, default=1)
     price_paid = db.Column(db.Float, nullable=False)
