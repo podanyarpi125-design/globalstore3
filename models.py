@@ -1,3 +1,4 @@
+# models.py
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime
@@ -13,8 +14,8 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    purchases = db.relationship('Purchase', backref='user', lazy=True)
-    transactions = db.relationship('Transaction', backref='user', lazy=True)
+    purchases = db.relationship('Purchase', backref='user', lazy='dynamic')
+    transactions = db.relationship('Transaction', backref='user', lazy='dynamic')
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
