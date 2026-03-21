@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Dashboard - GlobalStore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { 900: '#0f172a', 800: '#1e293b', 700: '#334155' },
+                        primary: { 500: '#3b82f6', 600: '#2563eb' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #0f172a; color: #f8fafc; font-family: -apple-system, 'Inter', sans-serif; min-height: 100vh; }
+        .glass-panel { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+        .modal.active { display: flex; }
+        .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 24px; width: 100%; max-width: 400px; padding: 24px; position: relative; animation: fadeIn 0.2s; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+        .close-modal { position: absolute; top: 16px; right: 20px; color: #94a3b8; cursor: pointer; font-size: 20px; }
+        .StripeElement { height: 52px; padding: 14px 16px; border: 1px solid #334155; border-radius: 14px; background-color: #0f172a; }
+        .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 1100; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @media (max-width: 640px) { .container { padding-left: 12px; padding-right: 12px; } .glass-panel { padding: 16px; } }
+    </style>
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast hidden">
+        <div id="toast-message" class="bg-dark-800 border rounded-xl shadow-xl px-5 py-3 flex items-center gap-3 max-w-xs">
+            <i id="toast-icon" class="text-lg"></i>
+            <span id="toast-text" class="text-sm font-medium"></span>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="bg-dark-800/95 backdrop-blur-md border-b border-dark-700 fixed w-full z-50 top-0">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <a href="/" class="text-xl font-bold text-white flex items-center gap-2">
+                <i class="fas fa-cube text-primary-500"></i> <span>GlobalStore</span>
+            </a>
+            <div class="flex items-center gap-3">
+                <button onclick="openBalanceModal()" class="flex items-center gap-1.5 bg-dark-900 px-3 py-1.5 rounded-full border border-dark-700">
+                    <i class="fas fa-wallet text-green-400 text-sm"></i> 
+                    <span class="font-bold text-white text-sm">${{ "%.2f"|format(user.balance) }}</span>
+                </button>
+                <a href="/logout" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-sign-out-alt text-xl"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 pt-20 pb-12">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold">Welcome, {{ user.username }}!</h1>
+            <p class="text-gray-400 text-sm mt-1">Manage your account and purchases</p>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-1">
+                <div class="glass-panel rounded-2xl p-5">
+                    <h2 class="text-lg font-bold mb-3">Account Info</h2>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between py-2 border-b border-dark-700">
+                            <span class="text-gray-400">Username</span>
+                            <span class="font-medium">{{ user.username }}</span>
+                        </div>
+                        <div class="flex justify-between py-2 border-b border-dark-700">
+                            <span class="text-gray-400">Discord ID</span>
+                            <span class="font-medium">{{ user.discord_id or 'Not set' }}</span>
+                        </div>
+                        <div class="flex justify-between py-2">
+                            <span class="text-gray-400">Member since</span>
+                            <span class="font-medium">{{ user.created_at.strftime('%Y-%m-%d') }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <div class="glass-panel rounded-2xl p-5">
+                    <h2 class="text-lg font-bold mb-3">Recent Purchases</h2>
+                    {% if purchases %}
+                        <div class="space-y-3">
+                            {% for p in purchases %}
+                            <div class="bg-dark-900/50 rounded-xl p-3 border border-dark-700">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <span class="font-bold text-sm">{{ p.product.name if p.product else 'Product' }}</span>
+                                        <p class="text-xs text-gray-400 mt-1">{{ p.purchased_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                                    </div>
+                                    <span class="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full text-xs">${{ "%.2f"|format(p.price_paid) }}</span>
+                                </div>
+                                {% if p.credentials %}
+                                <div class="mt-2 pt-2 border-t border-dark-700">
+                                    <p class="text-xs text-gray-400 mb-1">Credentials:</p>
+                                    <pre class="text-xs text-green-400 bg-dark-800 p-2 rounded-lg overflow-x-auto">{{ p.credentials }}</pre>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-gray-400 text-center py-6 text-sm">No purchases yet. <a href="/" class="text-primary-500">Browse products →</a></p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Modal -->
+    <div id="balance-modal" class="modal">
+        <div class="modal-content text-center">
+            <i class="fas fa-times close-modal" onclick="closeBalanceModal()"></i>
+            <div class="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 mx-auto mb-3">
+                <i class="fas fa-wallet text-xl"></i>
+            </div>
+            <h3 class="text-gray-400 text-xs uppercase mb-1">Current Balance</h3>
+            <p class="text-3xl font-black text-green-400 mb-5">${{ "%.2f"|format(user.balance) }}</p>
+            <div class="border-t border-gray-700/50 pt-4">
+                <h4 class="font-semibold mb-3 text-sm">Quick Top Up</h4>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="topUp(5)" class="bg-dark-900 border border-dark-700 hover:border-primary-500 py-2.5 rounded-xl text-sm">$5</button>
+                    <button onclick="topUp(10)" class="bg-dark-900 border border-dark-700 hover:border-primary-500 py-2.5 rounded-xl text-sm">$10</button>
+                    <button onclick="topUp(20)" class="bg-dark-900 border border-dark-700 hover:border-primary-500 py-2.5 rounded-xl text-sm">$20</button>
+                    <button onclick="topUp(50)" class="bg-dark-900 border border-dark-700 hover:border-primary-500 py-2.5 rounded-xl text-sm">$50</button>
+                    <button onclick="topUp(100)" class="bg-dark-900 border border-dark-700 hover:border-primary-500 py-2.5 rounded-xl text-sm col-span-2">$100</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const stripe = Stripe('{{ stripe_publishable_key or "pk_live_51TC4d7QJEKylmEk6odCUz9ee5pf24OyoDxWRV9PGQomu02GQzLwzpB3liuFIDbVD5OOECe6inTuRdmBOagPAYfHL00VgM4o2Mo" }}');
+        let elements = null, card = null, clientSecret = null;
+
+        function showToast(message, type = 'error') {
+            const toast = document.getElementById('toast-container');
+            const toastIcon = document.getElementById('toast-icon');
+            const toastText = document.getElementById('toast-text');
+            const toastDiv = toast.querySelector('#toast-message');
+            
+            if (type === 'error') {
+                toastDiv.className = 'bg-red-500/20 border border-red-500/50 rounded-xl shadow-xl px-5 py-3 flex items-center gap-3 max-w-xs';
+                toastIcon.className = 'fas fa-exclamation-circle text-red-400 text-lg';
+                toastText.className = 'text-red-400 text-sm font-medium';
+            } else if (type === 'warning') {
+                toastDiv.className = 'bg-yellow-500/20 border border-yellow-500/50 rounded-xl shadow-xl px-5 py-3 flex items-center gap-3 max-w-xs';
+                toastIcon.className = 'fas fa-exclamation-triangle text-yellow-400 text-lg';
+                toastText.className = 'text-yellow-400 text-sm font-medium';
+            } else {
+                toastDiv.className = 'bg-green-500/20 border border-green-500/50 rounded-xl shadow-xl px-5 py-3 flex items-center gap-3 max-w-xs';
+                toastIcon.className = 'fas fa-check-circle text-green-400 text-lg';
+                toastText.className = 'text-green-400 text-sm font-medium';
+            }
+            
+            toastText.textContent = message;
+            toast.classList.remove('hidden');
+            toast.classList.add('flex');
+            
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('flex');
+            }, 4000);
+        }
+
+        function openBalanceModal() { document.getElementById('balance-modal').classList.add('active'); }
+        function closeBalanceModal() { document.getElementById('balance-modal').classList.remove('active'); }
+        
+        async function topUp(amount) {
+            closeBalanceModal();
+            try {
+                const res = await fetch('/api/create-payment-intent', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({amount: amount})
+                });
+                const data = await res.json();
+                if (data.clientSecret) {
+                    const {error} = await stripe.confirmCardPayment(data.clientSecret);
+                    if (error) {
+                        showToast('Payment failed: ' + error.message, 'error');
+                    } else {
+                        showToast('✅ Balance updated!', 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                }
+            } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        }
+    </script>
+</body>
+</html>

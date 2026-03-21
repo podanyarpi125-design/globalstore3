@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - GlobalStore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 1rem; width: 100%; max-width: 500px; padding: 2rem; position: relative; }
+        .close-modal { position: absolute; top: 1rem; right: 1.5rem; color: #94a3b8; cursor: pointer; font-size: 1.5rem; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <nav class="bg-dark-800 border-b border-dark-700 fixed w-full z-50 top-0">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-white flex items-center gap-2">
+                <i class="fas fa-cube text-primary-500"></i> Admin
+            </a>
+            <div class="flex items-center gap-6">
+                <span class="text-green-400">{{ current_user.username }}</span>
+                <a href="/logout" class="text-gray-400 hover:text-white">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 pt-24 pb-12">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Admin Dashboard</h1>
+            <div class="flex gap-3">
+                <a href="/admin/products/manage" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg">
+                    <i class="fas fa-boxes"></i> Termékek
+                </a>
+                <a href="/" class="bg-gray-600 hover:bg-gray-500 px-5 py-2 rounded-lg">
+                    <i class="fas fa-home"></i> Bolt
+                </a>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="glass-card rounded-xl p-6 text-center">
+                <div class="text-gray-400 mb-2">Users</div>
+                <div class="text-3xl font-bold">{{ users|length }}</div>
+            </div>
+            <div class="glass-card rounded-xl p-6 text-center">
+                <div class="text-gray-400 mb-2">Products</div>
+                <div class="text-3xl font-bold">{{ products|length }}</div>
+            </div>
+            <div class="glass-card rounded-xl p-6 text-center">
+                <div class="text-gray-400 mb-2">Purchases</div>
+                <div class="text-3xl font-bold">{{ purchases|length }}</div>
+            </div>
+            <div class="glass-card rounded-xl p-6 text-center">
+                <div class="text-gray-400 mb-2">Active</div>
+                <div class="text-3xl font-bold">{{ products|selectattr('is_active', 'equalto', true)|list|length }}</div>
+            </div>
+        </div>
+
+        <div class="border-b border-dark-700 mb-6">
+            <div class="flex space-x-8">
+                <button onclick="showTab('users')" class="tab-button active py-2 px-1 border-b-2 border-primary-500 text-primary-500 font-medium">Users</button>
+                <button onclick="showTab('products')" class="tab-button py-2 px-1 border-b-2 border-transparent hover:text-white">Products</button>
+                <button onclick="showTab('purchases')" class="tab-button py-2 px-1 border-b-2 border-transparent hover:text-white">Purchases</button>
+                <button onclick="showTab('send-balance')" class="tab-button py-2 px-1 border-b-2 border-transparent hover:text-white">Send Balance</button>
+            </div>
+        </div>
+
+        <div id="tab-users" class="tab-content">
+            <div class="glass-card rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-900">
+                            <tr><th class="px-6 py-3 text-left">ID</th><th class="px-6 py-3 text-left">Username</th><th class="px-6 py-3 text-left">Balance</th><th class="px-6 py-3 text-left">Discord</th><th class="px-6 py-3 text-left">Admin</th><th class="px-6 py-3 text-left">Joined</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for u in users %}
+                            <tr class="border-t border-dark-700"><td class="px-6 py-4">{{ u.id }}</td><td class="px-6 py-4">{{ u.username }}</td><td class="px-6 py-4 text-green-400">${{ "%.2f"|format(u.balance) }}</td><td class="px-6 py-4">{{ u.discord_id or '-' }}</td><td class="px-6 py-4">{{ 'Yes' if u.is_admin else 'No' }}</td><td class="px-6 py-4">{{ u.created_at.strftime('%Y-%m-%d') }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-products" class="tab-content hidden">
+            <div class="glass-card rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-900"><tr><th class="px-6 py-3">ID</th><th class="px-6 py-3">SKU</th><th class="px-6 py-3">Name</th><th class="px-6 py-3">Price</th><th class="px-6 py-3">DailyStore</th><th class="px-6 py-3">Status</th><th class="px-6 py-3">Actions</th></tr></thead>
+                        <tbody>
+                            {% for p in products %}
+                            <tr class="border-t border-dark-700">
+                                <td class="px-6 py-4">{{ p.id }}</td>
+                                <td class="px-6 py-4 font-mono text-sm">{{ p.sku }}</td>
+                                <td class="px-6 py-4">{{ p.name }}</td>
+                                <td class="px-6 py-4 text-green-400">${{ "%.2f"|format(p.price) }}</td>
+                                <td class="px-6 py-4">${{ "%.2f"|format(p.daily_store_price) }}</td>
+                                <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs {% if p.is_active %}bg-green-500/20 text-green-400{% else %}bg-red-500/20 text-red-400{% endif %}">{{ 'Active' if p.is_active else 'Inactive' }}</span></td>
+                                <td class="px-6 py-4"><a href="/admin/products/manage" class="text-blue-400">Edit</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-purchases" class="tab-content hidden">
+            <div class="glass-card rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-900"><tr><th class="px-6 py-3">Order ID</th><th class="px-6 py-3">User</th><th class="px-6 py-3">Product</th><th class="px-6 py-3">Price</th><th class="px-6 py-3">Method</th><th class="px-6 py-3">Date</th></tr></thead>
+                        <tbody>
+                            {% for p in purchases %}
+                            <tr class="border-t border-dark-700"><td class="px-6 py-4">{{ p.id }}</td><td class="px-6 py-4">{{ p.user.username }}</td><td class="px-6 py-4">{{ p.product.name if p.product else 'Unknown' }}</td><td class="px-6 py-4 text-green-400">${{ "%.2f"|format(p.price_paid) }}</td><td class="px-6 py-4">{{ p.payment_method or 'balance' }}</td><td class="px-6 py-4">{{ p.purchased_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-send-balance" class="tab-content hidden">
+            <div class="glass-card rounded-xl p-8 max-w-md mx-auto">
+                <h2 class="text-2xl font-bold mb-6">Send Balance</h2>
+                <div class="space-y-4">
+                    <input type="text" id="target-username" placeholder="Username" class="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3">
+                    <input type="number" id="amount" step="0.01" placeholder="Amount ($)" class="w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3">
+                    <div class="flex gap-4">
+                        <button onclick="sendBalance('add')" class="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded-lg">Add Balance</button>
+                        <button onclick="sendBalance('remove')" class="flex-1 bg-red-600 hover:bg-red-500 py-3 rounded-lg">Remove Balance</button>
+                    </div>
+                    <div id="balance-result" class="hidden p-4 rounded-lg text-center"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'border-primary-500', 'text-primary-500');
+                btn.classList.add('border-transparent');
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            event.target.classList.add('active', 'border-primary-500', 'text-primary-500');
+        }
+        
+        async function sendBalance(action) {
+            const username = document.getElementById('target-username').value;
+            const amount = document.getElementById('amount').value;
+            const resultDiv = document.getElementById('balance-result');
+            
+            if (!username || !amount) {
+                alert('Please fill all fields');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/admin/send-balance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, amount: parseFloat(amount), action })
+                });
+                const data = await res.json();
+                resultDiv.classList.remove('hidden');
+                if (data.success) {
+                    resultDiv.className = 'mt-4 p-4 rounded-lg bg-green-500/20 text-green-400';
+                    resultDiv.innerHTML = `✅ Success! New balance: $${data.new_balance.toFixed(2)}`;
+                } else {
+                    resultDiv.className = 'mt-4 p-4 rounded-lg bg-red-500/20 text-red-400';
+                    resultDiv.innerHTML = `❌ Error: ${data.error}`;
+                }
+            } catch (err) {
+                resultDiv.classList.remove('hidden');
+                resultDiv.className = 'mt-4 p-4 rounded-lg bg-red-500/20 text-red-400';
+                resultDiv.innerHTML = `❌ Error: ${err.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
