@@ -5,7 +5,6 @@ import requests
 import traceback
 import smtplib
 import threading
-import sys
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -20,25 +19,14 @@ from admin_routes import admin_bp
 from app_routes import app_bp
 from email_utils import send_purchase_email
 
-# ============================================================
-# HIBAKERESÉS BEKAPCSOLÁSA - MINDEN KIMEGY A LOG-BA!
-# ============================================================
-import logging
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-print("=" * 60)
-print("🚀 GlobalStore alkalmazás indul...")
-print("=" * 60)
-
 load_dotenv()
 
 # ============================================================
 # POSTGRESQL URL ÁTALAKÍTÁSA (DigitalOcean miatt)
 # ============================================================
 DATABASE_URL = os.environ.get('DATABASE_URL')
-print(f"📁 DATABASE_URL: {DATABASE_URL[:50] if DATABASE_URL else 'NINCS'}...")
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-    print("✅ DATABASE_URL átalakítva postgresql://-re")
 
 # ============================================================
 # HIBANAplóZÁS
@@ -100,9 +88,10 @@ def send_admin_alert(subject, message):
         return False
 
 # ============================================================
-# DAILYSTORE API FUNKCIÓK
+# DAILYSTORE API FUNKCIÓK (ASZINKRON ELLENŐRZÉSHEZ)
 # ============================================================
 def check_dailystore_stock_async(sku, callback):
+    """Aszinkron stock ellenőrzés (nem blokkolja a főszálat)"""
     try:
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}'}
         response = requests.get(f'{DAILYSTORE_API_URL}/stock/{sku}', headers=headers, timeout=5)
@@ -114,6 +103,7 @@ def check_dailystore_stock_async(sku, callback):
         callback(999)
 
 def check_dailystore_balance_async(callback):
+    """Aszinkron balance ellenőrzés (nem blokkolja a főszálat)"""
     try:
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}'}
         response = requests.get(f'{DAILYSTORE_API_URL}/balance', headers=headers, timeout=5)
@@ -125,6 +115,7 @@ def check_dailystore_balance_async(callback):
         callback(999)
 
 def check_dailystore_stock(sku):
+    """Szinkron stock ellenőrzés (balance vásárláshoz)"""
     try:
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}'}
         response = requests.get(f'{DAILYSTORE_API_URL}/stock/{sku}', headers=headers, timeout=10)
@@ -135,6 +126,7 @@ def check_dailystore_stock(sku):
         return 999
 
 def check_dailystore_balance():
+    """Szinkron balance ellenőrzés (balance vásárláshoz)"""
     try:
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}'}
         response = requests.get(f'{DAILYSTORE_API_URL}/balance', headers=headers, timeout=10)
@@ -151,8 +143,6 @@ app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'kulcs123')
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///globalstore.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-print("🔧 Flask app konfigurálva")
 
 db.init_app(app)
 login_manager = LoginManager(app)
@@ -192,63 +182,45 @@ with app.app_context():
             print("⚠️ Nincsenek termékek! Használd az admin felületet.")
         
     except Exception as e:
-        print(f"❌ Indítási hiba: {e}")
-        traceback.print_exc()
         log_error(f"Indítási hiba: {str(e)}")
 
 # ============================================================
-# PUBLIKUS VÉGPONTOK - RÉSZLETES HIBAKERESÉSSEL!
+# PUBLIKUS VÉGPONTOK
 # ============================================================
 @app.route('/')
 def index():
-    print("🔵 Index route elindult")
     try:
-        print("🔵 Lekérdezem a termékeket...")
         products = Product.query.filter_by(is_active=True).all()
-        print(f"✅ {len(products)} termék betöltve")
-        
         stripe_publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
-        print(f"✅ Stripe kulcs: {stripe_publishable_key[:20] if stripe_publishable_key else 'MISSING'}...")
-        
-        print("🔵 Renderelés...")
         return render_template('index.html', 
                              user=current_user, 
                              products=products, 
                              stripe_publishable_key=stripe_publishable_key)
     except Exception as e:
-        print(f"❌ Index hiba: {e}")
-        traceback.print_exc()
         log_error(f"Index hiba: {str(e)}")
-        return f"Index hiba: {e}", 500
+        return "Hiba történt", 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    print("🔵 Login route elindult")
     try:
         if request.method == 'POST':
             username = request.form.get('username')
             password = request.form.get('password')
-            print(f"🔵 Bejelentkezés: {username}")
             user = User.query.filter_by(username=username).first()
             
             if user and check_password_hash(user.password, password):
                 login_user(user)
-                print(f"✅ {username} bejelentkezett")
                 if user.is_admin:
                     return redirect(url_for('admin_bp.admin_dashboard'))
                 return redirect(url_for('index'))
             flash('Hibás adatok', 'error')
-            print(f"❌ Sikertelen bejelentkezés: {username}")
         return render_template('login.html')
     except Exception as e:
-        print(f"❌ Login hiba: {e}")
-        traceback.print_exc()
         log_error(f"Login hiba: {str(e)}")
         return "Hiba történt", 500
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    print("🔵 Register route elindult")
     try:
         if request.method == 'POST':
             username = request.form.get('username')
@@ -267,12 +239,9 @@ def register():
             db.session.add(new_user)
             db.session.commit()
             login_user(new_user)
-            print(f"✅ Új felhasználó: {username}")
             return redirect(url_for('index'))
         return render_template('register.html')
     except Exception as e:
-        print(f"❌ Register hiba: {e}")
-        traceback.print_exc()
         log_error(f"Register hiba: {str(e)}")
         return "Hiba történt", 500
 
@@ -285,18 +254,14 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    print("🔵 Dashboard route elindult")
     try:
         purchases = Purchase.query.filter_by(user_id=current_user.id).order_by(Purchase.purchased_at.desc()).all()
-        print(f"✅ {len(purchases)} vásárlás betöltve")
         stripe_publishable_key = os.getenv('STRIPE_PUBLISHABLE_KEY')
         return render_template('user_dashboard.html', 
                              user=current_user, 
                              purchases=purchases,
                              stripe_publishable_key=stripe_publishable_key)
     except Exception as e:
-        print(f"❌ Dashboard hiba: {e}")
-        traceback.print_exc()
         log_error(f"Dashboard hiba: {str(e)}")
         return "Hiba történt", 500
 
@@ -305,7 +270,6 @@ def dashboard():
 # ============================================================
 @app.route('/api/test', methods=['GET'])
 def test():
-    print("🔵 Test endpoint called")
     return jsonify({'status': 'ok', 'message': 'API is working'})
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
@@ -329,6 +293,7 @@ def get_product_by_id(product_id):
 
 @app.route('/api/create-payment-intent', methods=['POST'])
 def create_payment_intent():
+    """Stripe PaymentIntent létrehozása - ASZINKRON DailyStore ellenőrzéssel"""
     try:
         data = request.get_json()
         amount = data.get('amount')
@@ -350,7 +315,7 @@ def create_payment_intent():
             if not product:
                 return jsonify({'error': 'Product not found'}), 404
             
-            # ASZINKRON ellenőrzések
+            # ASZINKRON ellenőrzések (nem blokkolják a Stripe hívást)
             stock_ok = [True]
             balance_ok = [True]
             stock_value = [0]
@@ -364,9 +329,11 @@ def create_payment_intent():
                 balance_value[0] = balance
                 balance_ok[0] = balance >= product.daily_store_price
             
+            # Indítjuk az aszinkron ellenőrzéseket
             threading.Thread(target=check_dailystore_stock_async, args=(product.sku, stock_callback)).start()
             threading.Thread(target=check_dailystore_balance_async, args=(balance_callback,)).start()
             
+            # Stripe PaymentIntent létrehozása (nem várjuk meg az ellenőrzéseket)
             intent = stripe.PaymentIntent.create(
                 amount=int(product.price * 100),
                 currency='usd',
@@ -379,9 +346,10 @@ def create_payment_intent():
                 automatic_payment_methods={'enabled': True}
             )
             
+            # Ha az ellenőrzések gyorsak, naplózzuk az eredményt (nem blokkol)
             def log_check_results():
                 import time
-                time.sleep(2)
+                time.sleep(2)  # Várunk 2 másodpercet az ellenőrzésekre
                 if not stock_ok[0]:
                     send_admin_alert("⚠️ Out of Stock Alert!", f"Product {product.name} (SKU: {product.sku}) is out of stock! Stock: {stock_value[0]}")
                 if not balance_ok[0]:
@@ -410,6 +378,7 @@ def purchase_with_balance():
         if current_user.balance < product.price:
             return jsonify({'error': 'Insufficient balance'}), 400
         
+        # Stock ellenőrzés (szinkron, mert itt kell a válasz)
         stock = check_dailystore_stock(product.sku)
         if stock <= 0:
             return jsonify({
@@ -417,6 +386,7 @@ def purchase_with_balance():
                 'error_type': 'out_of_stock'
             }), 404
         
+        # Balance ellenőrzés (szinkron, mert itt kell a válasz)
         ds_balance = check_dailystore_balance()
         if ds_balance < product.daily_store_price:
             send_admin_alert("Low DailyStore Balance!", f"Need ${product.daily_store_price}, have ${ds_balance}")
@@ -425,6 +395,7 @@ def purchase_with_balance():
                 'error_type': 'dailystore_balance'
             }), 503
         
+        # Vásárlás a DailyStore-ból
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}', 'Content-Type': 'application/json'}
         purchase_data = {'items': [{'sku': product.sku, 'quantity': 1}]}
         
@@ -445,6 +416,7 @@ def purchase_with_balance():
             if item.get('credentials'):
                 credentials.extend(item['credentials'])
         
+        # Levonás a felhasználótól
         current_user.balance -= product.price
         
         purchase = Purchase(
@@ -582,5 +554,4 @@ def admin_send_balance():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print("🚀 Flask app indítása...")
     app.run(debug=True)
