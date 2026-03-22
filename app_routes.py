@@ -1,4 +1,3 @@
-app_routes.py
 from flask import Blueprint, jsonify, request
 from models import db, User, Product, Purchase, Transaction
 import json
@@ -6,7 +5,8 @@ import requests
 import os
 from email_utils import send_purchase_email
 
-app_bp = Blueprint('app_bp', name, url_prefix='/api')
+# JAVÍTVA: name helyett __name__
+app_bp = Blueprint('app_bp', __name__, url_prefix='/api')
 
 DAILYSTORE_API_KEY = os.getenv('DAILYSTORE_API_KEY')
 DAILYSTORE_API_URL = os.getenv('DAILYSTORE_API_URL')
