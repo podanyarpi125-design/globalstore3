@@ -210,53 +210,18 @@
         let elements = null, card = null, clientSecret = null;
         let pendingPurchase = null;
 
-        function showToast(message, type = 'error') {
-            const toast = document.getElementById('toast-container');
-            const toastContent = document.getElementById('toast-content');
-            const toastIcon = document.getElementById('toast-icon');
-            const toastText = document.getElementById('toast-text');
-            toastContent.className = 'toast-content ' + type;
-            toastIcon.className = 'toast-icon ' + type;
-            if (type === 'error') toastIcon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
-            else if (type === 'warning') toastIcon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
-            else toastIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
-            toastText.innerHTML = message;
-            toast.classList.remove('hidden');
-            toast.classList.add('flex');
-            setTimeout(() => { toast.classList.add('hidden'); toast.classList.remove('flex'); }, 4000);
-        }
-
         window.buyCard = async function(productId, productName) {
             try {
                 showToast('Checking availability...', 'warning');
                 const res = await fetch('/api/create-payment-intent', {
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'},
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({product_id: productId})
                 });
-                
                 const data = await res.json();
-                
-                if (data.error) {
-                    const errorType = data.error_type;
-                    
-                    if (errorType === 'out_of_stock') {
-                        showToast('⚠️ ' + data.error, 'warning');
-                    } 
-                    else if (errorType === 'insufficient_dailystore_balance') {
-                        const required = data.required || 'unknown';
-                        const available = data.available || 'unknown';
-                        showToast(`⚠️ Insufficient store balance! Required: $${required}, Available: $${available}.`, 'warning');
-                    }
-                    else if (errorType === 'min_amount') {
-                        showToast('⚠️ ' + data.error, 'warning');
-                    }
-                    else {
-                        showToast('❌ ' + data.error, 'error');
-                    }
-                    return;
+                if (data.error) { 
+                    showToast('⚠️ ' + data.error, 'warning'); 
+                    return; 
                 }
-                
                 if (data.clientSecret) {
                     clientSecret = data.clientSecret;
                     document.getElementById('checkout-title').innerText = `Pay for ${productName}`;
@@ -292,10 +257,6 @@
                     body: JSON.stringify({amount: amount})
                 });
                 const data = await res.json();
-                if (data.error) {
-                    showToast('⚠️ ' + data.error, 'warning');
-                    return;
-                }
                 if (data.clientSecret) {
                     clientSecret = data.clientSecret;
                     document.getElementById('checkout-title').innerText = `Top Up $${amount}`;
@@ -350,6 +311,22 @@
             clientSecret = null;
         };
 
+        function showToast(message, type = 'error') {
+            const toast = document.getElementById('toast-container');
+            const toastContent = document.getElementById('toast-content');
+            const toastIcon = document.getElementById('toast-icon');
+            const toastText = document.getElementById('toast-text');
+            toastContent.className = 'toast-content ' + type;
+            toastIcon.className = 'toast-icon ' + type;
+            if (type === 'error') toastIcon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+            else if (type === 'warning') toastIcon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+            else toastIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+            toastText.innerHTML = message;
+            toast.classList.remove('hidden');
+            toast.classList.add('flex');
+            setTimeout(() => { toast.classList.add('hidden'); toast.classList.remove('flex'); }, 4000);
+        }
+
         function closeConfirmModal() {
             document.getElementById('confirm-modal').classList.remove('active');
         }
@@ -370,15 +347,9 @@
                     showToast('✅ Purchase successful! Credentials sent to email', 'success');
                     setTimeout(() => location.reload(), 1500);
                 } else {
-                    const errorType = data.error_type;
-                    
-                    if (errorType === 'out_of_stock') {
+                    if (data.error_type === 'out_of_stock') {
                         showToast('⚠️ ' + data.error, 'warning');
-                    } else if (errorType === 'insufficient_dailystore_balance') {
-                        const required = data.required || 'unknown';
-                        const available = data.available || 'unknown';
-                        showToast(`⚠️ Insufficient store balance! Required: $${required}, Available: $${available}.`, 'warning');
-                    } else if (errorType === 'user_balance') {
+                    } else if (data.error_type === 'dailystore_balance') {
                         showToast('⚠️ ' + data.error, 'warning');
                         setTimeout(() => openBalanceModal(), 1500);
                     } else {

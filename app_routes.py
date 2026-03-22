@@ -1,4 +1,4 @@
-# app_routes.py
+app_routes.py
 from flask import Blueprint, jsonify, request
 from models import db, User, Product, Purchase, Transaction
 import json
@@ -6,7 +6,7 @@ import requests
 import os
 from email_utils import send_purchase_email
 
-app_bp = Blueprint('app_bp', __name__, url_prefix='/api')
+app_bp = Blueprint('app_bp', name, url_prefix='/api')
 
 DAILYSTORE_API_KEY = os.getenv('DAILYSTORE_API_KEY')
 DAILYSTORE_API_URL = os.getenv('DAILYSTORE_API_URL')
@@ -38,34 +38,34 @@ def bot_purchase():
         data = request.get_json()
         discord_id = data.get('discord_id')
         product_id = data.get('product_id')
-        
+
         user = User.query.filter_by(discord_id=discord_id).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
-        
+
         product = Product.query.get(int(product_id))
         if not product:
             return jsonify({'error': 'Product not found'}), 404
-        
+
         if user.balance < product.price:
             return jsonify({'error': 'Insufficient balance'}), 400
-        
+
         headers = {'Authorization': f'Bearer {DAILYSTORE_API_KEY}', 'Content-Type': 'application/json'}
         purchase_data = {'items': [{'sku': product.sku, 'quantity': 1}]}
-        
+
         ds_response = requests.post(f'{DAILYSTORE_API_URL}/purchase', headers=headers, json=purchase_data)
-        
+
         if ds_response.status_code != 201:
             return jsonify({'error': 'API error'}), 500
-        
+
         ds_result = ds_response.json()
         credentials = []
         for item in ds_result.get('items', []):
             if item.get('credentials'):
                 credentials.extend(item['credentials'])
-        
+
         user.balance -= product.price
-        
+
         purchase = Purchase(
             user_id=user.id,
             product_id=product.id,
@@ -75,10 +75,10 @@ def bot_purchase():
         )
         db.session.add(purchase)
         db.session.commit()
-        
+
         if '@' in user.username:
             send_purchase_email(user.username, product.name, credentials)
-        
+
         return jsonify({'success': True, 'new_balance': user.balance, 'credentials': credentials})
     except Exception as e:
         db.session.rollback()

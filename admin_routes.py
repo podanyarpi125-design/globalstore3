@@ -1,4 +1,4 @@
-cat > admin_routes.py << 'EOF'
+# admin_routes.py
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from models import db, User, Product, Purchase, Transaction
@@ -18,6 +18,9 @@ def admin_dashboard():
     purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).limit(20).all()
     return render_template('admin_dashboard.html', users=users, products=products, purchases=purchases)
 
+# ============================================================
+# TERMÉK KEZELÉS
+# ============================================================
 @admin_bp.route('/products/manage')
 @login_required
 def manage_products():
@@ -118,6 +121,9 @@ def delete_product(product_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# ============================================================
+# BULK ADD PRODUCTS (ÚJ VÉGPONT!)
+# ============================================================
 @admin_bp.route('/products/bulk-add', methods=['POST'])
 @login_required
 def bulk_add_products():
@@ -130,6 +136,7 @@ def bulk_add_products():
         
         added = 0
         skipped = 0
+        errors = []
         
         for p in products:
             sku = p.get('sku', '').strip()
@@ -140,6 +147,7 @@ def bulk_add_products():
             category = p.get('category', '')
             
             if not sku or not name or price <= 0:
+                errors.append(f"Hiányzó adatok: {sku or 'ismeretlen'}")
                 continue
             
             existing = Product.query.filter_by(sku=sku).first()
@@ -160,51 +168,42 @@ def bulk_add_products():
             added += 1
         
         db.session.commit()
-        return jsonify({'success': True, 'added': added, 'skipped': skipped})
+        
+        return jsonify({
+            'success': True, 
+            'added': added, 
+            'skipped': skipped,
+            'errors': errors if errors else None
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# ============================================================
+# EGYÉB ADMIN VÉGPONTOK
+# ============================================================
 @admin_bp.route('/users')
 @login_required
 def users():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized'}), 403
-    
-    users = User.query.all()
     return jsonify([{
         'id': u.id, 'username': u.username, 'balance': u.balance, 
         'discord_id': u.discord_id, 'is_admin': u.is_admin
-    } for u in users])
+    } for u in User.query.all()])
 
 @admin_bp.route('/purchases')
 @login_required
 def get_purchases():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized'}), 403
-    
     purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).all()
-    result = []
-    for p in purchases:
-        user = User.query.get(p.user_id)
-        product = Product.query.get(p.product_id)
-        credentials = []
-        if p.credentials:
-            try:
-                credentials = json.loads(p.credentials)
-            except:
-                credentials = [p.credentials]
-        
-        result.append({
-            'id': p.id,
-            'user': user.username if user else 'Unknown',
-            'product': product.name if product else 'Unknown',
-            'price_paid': p.price_paid,
-            'payment_method': p.payment_method,
-            'credentials': credentials,
-            'purchased_at': p.purchased_at.strftime('%Y-%m-%d %H:%M')
-        })
-    return jsonify(result)
+    return jsonify([{
+        'id': p.id, 'user': p.user.username, 'product': p.product.name if p.product else 'Unknown',
+        'price_paid': p.price_paid, 'payment_method': p.payment_method,
+        'credentials': json.loads(p.credentials) if p.credentials else [],
+        'purchased_at': p.purchased_at.strftime('%Y-%m-%d %H:%M')
+    } for p in purchases])
 
 @admin_bp.route('/send-balance', methods=['POST'])
 @login_required
@@ -232,4 +231,3 @@ def send_balance():
         return jsonify({'success': True, 'new_balance': user.balance})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-EOF

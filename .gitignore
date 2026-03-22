@@ -1,6 +1,5 @@
-__pycache__/
-*.pyc
 .env
+pycache/
+*.pyc
 error_log.txt
 instance/
-*.db

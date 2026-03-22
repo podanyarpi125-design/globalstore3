@@ -1,4 +1,4 @@
-cat > models.py << 'EOF'
+# models.py
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime
@@ -13,9 +13,6 @@ class User(UserMixin, db.Model):
     discord_id = db.Column(db.String(50), nullable=True)
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    purchases = db.relationship('Purchase', backref='user', lazy=True)
-    transactions = db.relationship('Transaction', backref='user', lazy=True)
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -32,13 +29,9 @@ class Purchase(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     product = db.relationship('Product')
-    
-    quantity = db.Column(db.Integer, default=1)
     price_paid = db.Column(db.Float, nullable=False)
     daily_store_order_id = db.Column(db.String(100), nullable=True)
     credentials = db.Column(db.Text, nullable=True)
-    payment_method = db.Column(db.String(50))
-    status = db.Column(db.String(50), default='completed')
     purchased_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Transaction(db.Model):
@@ -49,4 +42,3 @@ class Transaction(db.Model):
     description = db.Column(db.String(200))
     stripe_payment_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-EOF

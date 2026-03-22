@@ -1,4 +1,4 @@
-# bot.py
+bot.py
 import discord
 from discord.ext import commands
 import requests
@@ -36,7 +36,7 @@ async def products(ctx):
         r = requests.get(f'{API_URL}/api/products')
         if r.status_code == 200:
             products = r.json()
-            msg = "**Termékek:**\n"
+            msg = "Termékek:\n"
             for p in products[:5]:
                 msg += f"{p['name']} - ${p['price']}\n"
             await ctx.send(msg)
