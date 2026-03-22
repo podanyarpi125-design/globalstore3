@@ -1,4 +1,4 @@
-# admin_routes.py
+cat > admin_routes.py << 'EOF'
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from models import db, User, Product, Purchase, Transaction
@@ -13,14 +13,10 @@ def admin_dashboard():
         flash('Access denied', 'error')
         return redirect(url_for('index'))
     
-    try:
-        users = User.query.all()
-        products = Product.query.all()
-        purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).limit(20).all()
-        return render_template('admin_dashboard.html', users=users, products=products, purchases=purchases)
-    except Exception as e:
-        print(f"Admin dashboard error: {e}")
-        return f"Admin dashboard error: {e}", 500
+    users = User.query.all()
+    products = Product.query.all()
+    purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).limit(20).all()
+    return render_template('admin_dashboard.html', users=users, products=products, purchases=purchases)
 
 @admin_bp.route('/products/manage')
 @login_required
@@ -29,12 +25,8 @@ def manage_products():
         flash('Access denied', 'error')
         return redirect(url_for('index'))
     
-    try:
-        products = Product.query.all()
-        return render_template('admin_products.html', products=products)
-    except Exception as e:
-        print(f"Manage products error: {e}")
-        return f"Error: {e}", 500
+    products = Product.query.all()
+    return render_template('admin_products.html', products=products)
 
 @admin_bp.route('/products/add', methods=['POST'])
 @login_required
@@ -74,7 +66,6 @@ def add_product():
         return jsonify({'success': True, 'product': {'id': new_product.id, 'sku': new_product.sku, 'name': new_product.name}})
     except Exception as e:
         db.session.rollback()
-        print(f"Add product error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/products/update/<int:product_id>', methods=['PUT'])
@@ -107,7 +98,6 @@ def update_product(product_id):
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        print(f"Update product error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/products/delete/<int:product_id>', methods=['DELETE'])
@@ -126,7 +116,6 @@ def delete_product(product_id):
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        print(f"Delete product error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/products/bulk-add', methods=['POST'])
@@ -174,7 +163,6 @@ def bulk_add_products():
         return jsonify({'success': True, 'added': added, 'skipped': skipped})
     except Exception as e:
         db.session.rollback()
-        print(f"Bulk add error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/users')
@@ -183,18 +171,11 @@ def users():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized'}), 403
     
-    try:
-        users = User.query.all()
-        return jsonify([{
-            'id': u.id,
-            'username': u.username,
-            'balance': u.balance,
-            'discord_id': u.discord_id,
-            'is_admin': u.is_admin
-        } for u in users])
-    except Exception as e:
-        print(f"Users error: {e}")
-        return jsonify({'error': str(e)}), 500
+    users = User.query.all()
+    return jsonify([{
+        'id': u.id, 'username': u.username, 'balance': u.balance, 
+        'discord_id': u.discord_id, 'is_admin': u.is_admin
+    } for u in users])
 
 @admin_bp.route('/purchases')
 @login_required
@@ -202,32 +183,28 @@ def get_purchases():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized'}), 403
     
-    try:
-        purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).all()
-        result = []
-        for p in purchases:
-            username = p.user.username if p.user else 'Unknown'
-            product_name = p.product.name if p.product else 'Unknown'
-            credentials = []
-            if p.credentials:
-                try:
-                    credentials = json.loads(p.credentials)
-                except:
-                    credentials = [p.credentials]
-            
-            result.append({
-                'id': p.id,
-                'user': username,
-                'product': product_name,
-                'price_paid': p.price_paid,
-                'payment_method': p.payment_method,
-                'credentials': credentials,
-                'purchased_at': p.purchased_at.strftime('%Y-%m-%d %H:%M')
-            })
-        return jsonify(result)
-    except Exception as e:
-        print(f"Purchases error: {e}")
-        return jsonify({'error': str(e)}), 500
+    purchases = Purchase.query.order_by(Purchase.purchased_at.desc()).all()
+    result = []
+    for p in purchases:
+        user = User.query.get(p.user_id)
+        product = Product.query.get(p.product_id)
+        credentials = []
+        if p.credentials:
+            try:
+                credentials = json.loads(p.credentials)
+            except:
+                credentials = [p.credentials]
+        
+        result.append({
+            'id': p.id,
+            'user': user.username if user else 'Unknown',
+            'product': product.name if product else 'Unknown',
+            'price_paid': p.price_paid,
+            'payment_method': p.payment_method,
+            'credentials': credentials,
+            'purchased_at': p.purchased_at.strftime('%Y-%m-%d %H:%M')
+        })
+    return jsonify(result)
 
 @admin_bp.route('/send-balance', methods=['POST'])
 @login_required
@@ -237,37 +214,22 @@ def send_balance():
     
     try:
         data = request.get_json()
-        username = data.get('username')
-        amount = float(data.get('amount', 0))
-        action = data.get('action')
-        
-        target_user = User.query.filter_by(username=username).first()
-        if not target_user:
+        user = User.query.filter_by(username=data['username']).first()
+        if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        if action == 'add':
-            target_user.balance += amount
-            description = f'Admin hozzáadás: ${amount}'
-        elif action == 'remove':
-            if target_user.balance < amount:
+        amount = float(data['amount'])
+        if data['action'] == 'add':
+            user.balance += amount
+        elif data['action'] == 'remove':
+            if user.balance < amount:
                 return jsonify({'error': 'Insufficient balance'}), 400
-            target_user.balance -= amount
-            description = f'Admin levonás: ${amount}'
+            user.balance -= amount
         else:
             return jsonify({'error': 'Invalid action'}), 400
         
-        # Tranzakció naplózása
-        transaction = Transaction(
-            user_id=target_user.id,
-            amount=amount if action == 'add' else -amount,
-            type='admin',
-            description=description
-        )
-        db.session.add(transaction)
         db.session.commit()
-        
-        return jsonify({'success': True, 'new_balance': target_user.balance})
+        return jsonify({'success': True, 'new_balance': user.balance})
     except Exception as e:
-        db.session.rollback()
-        print(f"Send balance error: {e}")
         return jsonify({'error': str(e)}), 500
+EOF

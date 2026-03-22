@@ -1,4 +1,4 @@
-cat > models.py << 'EOF'
+# models.py
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime
@@ -14,6 +14,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Kapcsolatok - EGYETLEN helyen!
     purchases = db.relationship('Purchase', backref='user', lazy=True)
     transactions = db.relationship('Transaction', backref='user', lazy=True)
 
@@ -32,6 +33,7 @@ class Purchase(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     product = db.relationship('Product')
+    # NINCS user = db.relationship('User') - a backref oldja meg!
     
     quantity = db.Column(db.Integer, default=1)
     price_paid = db.Column(db.Float, nullable=False)
@@ -49,4 +51,3 @@ class Transaction(db.Model):
     description = db.Column(db.String(200))
     stripe_payment_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-EOF
